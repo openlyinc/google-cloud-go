@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
@@ -305,6 +307,7 @@ func TestStreamingPull(t *testing.T) {
 	if diff := testutil.Diff(got, want); diff != "" {
 		t.Error(diff)
 	}
+	time.Sleep(5 * time.Second)
 }
 
 // This test acks each message as it arrives and makes sure we don't see dups.
@@ -642,6 +645,42 @@ func TestTryDeliverMessage(t *testing.T) {
 		default:
 			t.Fatalf("[avail=%d]: expected msg to be put on stream %d's channel, but it was not", test.availStreamIdx, idx)
 		}
+	}
+}
+
+func TestPushConfig(t *testing.T) {
+	// A simple test of streaming pull.
+	pclient, sclient, _, cleanup := newFake(context.TODO(), t)
+	defer cleanup()
+
+	var callCount int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+
+		w.WriteHeader(200)
+	}))
+	defer srv.Close()
+
+	top := mustCreateTopic(context.TODO(), t, pclient, &pb.Topic{Name: "projects/P/topics/T"})
+	_ = mustCreateSubscription(context.TODO(), t, sclient, &pb.Subscription{
+		Name:               "projects/P/subscriptions/S",
+		Topic:              top.Name,
+		AckDeadlineSeconds: 10,
+		PushConfig: &pb.PushConfig{
+			PushEndpoint: srv.URL,
+		},
+	})
+
+	want := publish(t, pclient, top, []*pb.PubsubMessage{
+		{Data: []byte("d1")},
+		{Data: []byte("d2")},
+		{Data: []byte("d3")},
+	})
+
+	time.Sleep(5 * time.Second)
+
+	if callCount != 3 {
+		t.Errorf("expected %d webhooks but got %d", len(want), callCount)
 	}
 }
 

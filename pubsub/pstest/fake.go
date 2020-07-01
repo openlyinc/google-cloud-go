@@ -23,9 +23,11 @@
 package pstest
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"path"
 	"sort"
 	"strings"
@@ -784,6 +786,17 @@ func (s *subscription) deliver() {
 		if m.outstanding() {
 			continue
 		}
+
+		if s.proto.PushConfig.PushEndpoint != "" {
+			err := s.tryDeliverPush(m, now)
+
+			if err != nil {
+				break
+			}
+
+			continue
+		}
+
 		// If the message was never delivered before, start with the stream at
 		// curIndex. If it was delivered before, start with the stream after the one
 		// that owned it.
@@ -802,6 +815,25 @@ func (s *subscription) deliver() {
 			m.streamIndex = delIndex
 		}
 	}
+}
+
+func (s *subscription) tryDeliverPush(m *message, now time.Time) error {
+	if *m.deliveries > 0 {
+		return nil
+	}
+
+	pushUrl := s.proto.PushConfig.PushEndpoint
+	res, err := http.Post(pushUrl, "application/json", bytes.NewReader(m.proto.Message.Data))
+	if err != nil {
+		return err
+	}
+
+	if res.StatusCode != 200 {
+		return fmt.Errorf("push response code was %d, not 200", res.StatusCode)
+	}
+
+	(*m.deliveries)++
+	return nil
 }
 
 // tryDeliverMessage attempts to deliver m to the stream at index i. If it can't, it
