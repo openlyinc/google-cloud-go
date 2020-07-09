@@ -682,6 +682,8 @@ func TestPushConfig(t *testing.T) {
 	if callCount != 3 {
 		t.Errorf("expected %d webhooks but got %d", len(want), callCount)
 	}
+
+	// TODO: actually check the contents of the messages too
 }
 
 func mustStartStreamingPull(ctx context.Context, t *testing.T, sc pb.SubscriberClient, sub *pb.Subscription) pb.Subscriber_StreamingPullClient {

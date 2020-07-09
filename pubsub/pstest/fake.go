@@ -25,6 +25,7 @@ package pstest
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -822,8 +823,14 @@ func (s *subscription) tryDeliverPush(m *message, now time.Time) error {
 		return nil
 	}
 
+	body, err := json.Marshal(m.proto.Message)
+
+	if err != nil {
+		return err
+	}
+
 	pushUrl := s.proto.PushConfig.PushEndpoint
-	res, err := http.Post(pushUrl, "application/json", bytes.NewReader(m.proto.Message.Data))
+	res, err := http.Post(pushUrl, "application/json", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
